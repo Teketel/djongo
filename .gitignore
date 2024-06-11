@@ -9,3 +9,5 @@ Gemfile.lock
 
 /docs/.jekyll-metadata
 /docs/djongocs/assets/*
+
+.DS_Store
