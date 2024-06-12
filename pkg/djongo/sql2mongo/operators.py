@@ -525,7 +525,7 @@ class CmpOp(_Op):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._identifier = SQLToken.token2sql(self.statement.left, self.query)
-
+        self._is_empty = False
         if isinstance(self.statement.right, Identifier):
             raise SQLDecodeError('Join using WHERE not supported')
 
@@ -534,7 +534,11 @@ class CmpOp(_Op):
 
         self._constant = self.params[index] if index is not None else None
         if isinstance(self._constant, dict):
-            self._field_ext, self._constant = next(iter(self._constant.items()))
+            if not self._constant:
+                self._field_ext = None
+                self._is_empty = True
+            else:
+                self._field_ext, self._constant = next(iter(self._constant.items()))
         else:
             self._field_ext = None
 
@@ -548,11 +552,14 @@ class CmpOp(_Op):
         field = self._identifier.field
         if self._field_ext:
             field += '.' + self._field_ext
-
-        if not self.is_negated:
-            return {field: {self._operator: self._constant}}
+        if self._is_empty:
+            value = {}
         else:
-            return {field: {'$not': {self._operator: self._constant}}}
+            value = {self._operator: self._constant}
+        if not self.is_negated:
+            return {field: value}
+        else:
+            return {field: {'$not': value}}
 
 
 class FuncOp(CmpOp):
