@@ -145,7 +145,7 @@ class ModelField(MongoField):
                 continue
             processed_value[field.attname] = getattr(field, func_name)(field_value, *other_args)
         return processed_value
-    
+
     def _save_value_thru_fields(self,
                                 func_name: str,
                                 value: dict,
@@ -179,6 +179,7 @@ class ModelField(MongoField):
 
     def _value_thru_container(self, value):
         processed_value = {}
+        self.model_container._meta.abstract = False
         inst = self.model_container(**value)
         for field in self.model_container._meta.get_fields():
             processed_value[field.attname] = getattr(inst, field.attname)
@@ -227,10 +228,10 @@ class ModelField(MongoField):
                 f'Value: {value} must be an instance of {self.base_type}')
 
         processed_value = self._save_value_thru_fields('get_db_prep_save',
-                                                       value, 
+                                                       value,
                                                        connection)
         return processed_value
-     
+
     def get_prep_value(self, value):
         if (value is None or
                 not isinstance(value, self.base_type)):
