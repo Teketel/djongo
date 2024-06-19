@@ -16,7 +16,7 @@ from pymongo.errors import OperationFailure, CollectionInvalid
 from sqlparse import parse as sqlparse
 from sqlparse import tokens
 from sqlparse.sql import (
-    Identifier, Parenthesis,
+    Identifier, Parenthesis, Values,
     Where,
     Statement)
 
@@ -355,7 +355,11 @@ class InsertQuery(DMLQuery):
 
     def _fill_values(self, statement: SQLStatement):
         for tok in statement:
-            if isinstance(tok, Parenthesis):
+            if tok.is_whitespace:
+                continue
+            elif isinstance(tok, Values):
+                self._fill_values(tok.tokens)
+            elif isinstance(tok, Parenthesis):
                 placeholder = SQLToken.token2sql(tok, self)
                 values = []
                 for index in placeholder:
