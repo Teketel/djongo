@@ -1,5 +1,6 @@
 from logging import getLogger
 from pymongo import MongoClient
+from pymongo.errors import InvalidOperation
 
 logger = getLogger(__name__)
 clients = {}
@@ -7,8 +8,12 @@ clients = {}
 
 def connect(db, **kwargs):
     try:
-        return clients[db]
+        conn_client = clients[db]
+        conn_client.server_info()
     except KeyError:
+        logger.debug('New MongoClient connection')
+        clients[db] = MongoClient(**kwargs, connect=False)
+    except InvalidOperation:
         logger.debug('New MongoClient connection')
         clients[db] = MongoClient(**kwargs, connect=False)
     return clients[db]
