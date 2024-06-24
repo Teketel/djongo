@@ -58,6 +58,7 @@ class _UnaryOp(_Op):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._field = self.statement.next_token.value
         self._op = None
 
     def negate(self):
@@ -281,6 +282,14 @@ class NotOp(_UnaryOp):
         if self.lhs is not None:
             self.lhs.rhs = self.rhs
 
+    def to_mongo(self):
+        # The following condition added to stop RecursionError: maximum recursion depth exceeded in comparison. 
+        # Infinite Recursion occures for the following type of query. when NOT and AND comes together.
+        # SELELCT * FROM table01 WHERE (NOT coll01 AND coll02 = value)
+        if self.rhs is None or isinstance(self.rhs, _AndOrOp):
+            return {self._field: {'$ne': True}}
+        else:
+            super().to_mongo()
 
 class _AndOrOp(_Op):
 
