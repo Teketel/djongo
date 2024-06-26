@@ -166,12 +166,16 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
         connection_params['document_class'] = OrderedDict
         # connection_params['tz_aware'] = True
+        
         # To prevent leaving unclosed connections behind,
         # client_conn must be closed before a new connection
         # is created.
-        if self.client_connection is not None:
-            self.client_connection.close()
-            logger.debug('Existing MongoClient connection closed')
+
+        # On PyMongo>4 closing connection causing "pymongo.errors.InvalidOperation: Cannot use MongoClient after close"
+        # removed till find better solution.
+        # if self.client_connection is not None :
+        #     self.client_connection.close()
+        #     logger.debug('Existing MongoClient connection closed')
 
         self.client_connection = Database.connect(db=name, **connection_params)
         logger.debug('New Database connection')
