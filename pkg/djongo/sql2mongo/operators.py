@@ -276,7 +276,11 @@ class NotOp(_UnaryOp):
         raise SQLDecodeError
 
     def evaluate(self):
-        self.rhs.negate()
+        # The following condition added to disable NEGATION on RHS 
+        # $and operation is being $or ed for the following type of query. when NOT and AND comes together.
+        # SELELCT * FROM table01 WHERE (NOT coll01 AND coll02 = value)
+        if not (self.rhs is None or isinstance(self.rhs, _AndOrOp)):
+            self.rhs.negate()
         if isinstance(self.rhs, ParenthesisOp):
             self.rhs.evaluate()
         if self.lhs is not None:
