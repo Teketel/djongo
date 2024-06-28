@@ -3,12 +3,15 @@ MongoDB database backend for Django
 """
 from collections import OrderedDict
 from logging import getLogger
+
+from pymongo.errors import InvalidOperation
+
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.client import BaseDatabaseClient
 from logging.config import dictConfig
 from django.db.utils import Error
 from .creation import DatabaseCreation
-from . import database as Database
+from .database import Database
 from .cursor import Cursor
 from .features import DatabaseFeatures
 from .introspection import DatabaseIntrospection
@@ -177,7 +180,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         #     self.client_connection.close()
         #     logger.debug('Existing MongoClient connection closed')
 
-        self.client_connection = Database.connect(db=name, **connection_params)
+        self.client_connection = Database().connect(db=name, **connection_params)
         logger.debug('New Database connection')
 
         database = self.client_connection[name]
@@ -203,7 +206,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         """
         Returns an active connection cursor to the database.
         """
-        return Cursor(self.client_connection, self.connection, self.djongo_connection)
+        return Cursor(self)
 
     def _close(self):
         """
@@ -224,3 +227,13 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         TODO: two phase commits are not supported yet.
         """
         pass
+    
+    def ensure_connection(self):
+        # Recreate closed db connections
+        if self.client_connection is None:
+            self.connection = self.get_new_connection(self.get_connection_params())
+        else:
+            try:
+                self.client_connection.server_info()
+            except InvalidOperation:
+                self.connection = self.get_new_connection(self.get_connection_params())

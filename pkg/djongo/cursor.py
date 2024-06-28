@@ -9,12 +9,11 @@ logger = getLogger(__name__)
 class Cursor:
 
     def __init__(self,
-                 client_conn,
-                 db_conn,
-                 connection_properties):
-        self.db_conn = db_conn
-        self.client_conn = client_conn
-        self.connection_properties = connection_properties
+                 db_wrapper):
+        self.db_wrapper = db_wrapper
+        self.db_conn = self.db_wrapper.connection
+        self.client_conn = self.db_wrapper.client_connection
+        self.connection_properties = self.db_wrapper.djongo_connection
         self.result = None
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -48,6 +47,7 @@ class Cursor:
 
     def execute(self, sql, params=None):
         try:
+            self.ensure_connection()
             self.result = Query(
                 self.client_conn,
                 self.db_conn,
@@ -83,3 +83,8 @@ class Cursor:
     def fetchall(self):
         return list(self.result)
 
+    def ensure_connection(self):
+        self.db_wrapper.ensure_connection()
+        self.db_conn = self.db_wrapper.connection
+        self.client_conn = self.db_wrapper.client_connection
+        self.connection_properties = self.db_wrapper.djongo_connection
