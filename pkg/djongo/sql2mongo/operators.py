@@ -2,6 +2,7 @@ import re
 import typing
 import json
 from itertools import chain
+import bson.regex
 
 from sqlparse import tokens
 from sqlparse.sql import Token, Parenthesis, Comparison, IdentifierList, Identifier, Function
@@ -154,14 +155,14 @@ class InOp(_InNotInOp):
         self.is_negated = True
 
 
-class LikeOp(_BinaryOp):
+class LikeOp:
+    def __init__(self, to_match):
+        self.to_match = self.check_embedded(to_match)
+        self.field_ext = ''
+        self.regex = self.make_regex()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(name='LIKE', *args, **kwargs)
-        self._regex = None
-        self._make_regex(self.statement.next())
-
-    def check_embedded(self, to_match):
+    @staticmethod
+    def check_embedded(to_match):
         try:
             check_dict = to_match
             replace_chars = "\\%'"
@@ -178,31 +179,17 @@ class LikeOp(_BinaryOp):
         except Exception as e:
             return to_match
 
-    def _make_regex(self, token):
-        index = SQLToken.placeholder_index(token)
-
-        to_match = self.params[index]
-        to_match = self.check_embedded(to_match)
-        if isinstance(to_match, str):
-            to_match = to_match.replace('%', '.*')
-            self._regex = '^' + to_match + '$'
-        elif isinstance(to_match, dict):
-            field_ext, to_match = next(iter(to_match.items()))
-            self._field += '.' + field_ext
-            self._regex = to_match
+    def make_regex(self):
+        if isinstance(self.to_match, str):
+            to_match = self.to_match.replace('%', '.*')
+            regex = '^' + to_match + '$'
+        elif isinstance(self.to_match, dict):
+            regex = self.to_match
+            field_ext, self.to_match = next(iter(self.to_match.items()))
+            self.field_ext += field_ext
         else:
             raise SQLDecodeError
-            
-    def to_mongo(self):
-        return {self._field: {'$regex': self._regex}}
-
-
-class iLikeOp(LikeOp):
-    def to_mongo(self):
-        return {self._field: {
-            '$regex': self._regex,
-            '$options': 'im'
-        }}
+        return regex
 
 
 class IsOp(_BinaryOp):
@@ -411,12 +398,6 @@ class _StatementParser:
             else:
                 op = NotOp(**kw)
 
-        elif tok.match(tokens.Keyword, 'LIKE'):
-            op = LikeOp(**kw)
-
-        elif tok.match(tokens.Keyword, 'iLIKE'):
-            op = iLikeOp(**kw)
-
         elif tok.match(tokens.Keyword, 'BETWEEN'):
             op = BetweenOp(**kw)
             statement.skip(3)
@@ -542,16 +523,23 @@ class CmpOp(_Op):
         if isinstance(self.statement.right, Identifier):
             raise SQLDecodeError('Join using WHERE not supported')
 
-        self._operator = OPERATOR_MAP[self.statement.token_next(0)[1].value]
+        self._sql_operator = self.statement.token_next(0)[1].value
+        self._operator = OPERATOR_MAP[self._sql_operator]
         index = re_index(self.statement.right.value)
 
         self._constant = self.params[index] if index is not None else None
+        if self._sql_operator in LIKE_OPERATOR_MAP.keys():
+            like_op = LikeOp(to_match=self._constant)
+            self._constant = like_op.regex
+
         if isinstance(self._constant, dict):
             if not self._constant:
                 self._field_ext = None
                 self._is_empty = True
             else:
                 self._field_ext, self._constant = next(iter(self._constant.items()))
+        elif self._sql_operator in LIKE_OPERATOR_MAP.keys():
+            self._field_ext = getattr(like_op, 'field_ext', None)
         else:
             self._field_ext = None
 
@@ -565,14 +553,22 @@ class CmpOp(_Op):
         field = self._identifier.field
         if self._field_ext:
             field += '.' + self._field_ext
-        if self._is_empty:
-            value = {}
-        else:
-            value = {self._operator: self._constant}
+        
         if not self.is_negated:
-            return {field: value}
+            mongo = {field: {self._operator: self._constant}}
+            if self._sql_operator == 'iLIKE':
+                mongo[field]['$options'] = 'im'
+            
         else:
-            return {field: {'$not': value}}
+            if self._sql_operator in LIKE_OPERATOR_MAP:
+                regex = bson.regex.Regex(self._constant, 'i')
+                if self._sql_operator == 'iLIKE':
+                    regex = bson.regex.Regex(self._constant, 'i')
+                mongo = {field: {'$not': regex}}
+            else:
+                mongo = {field: {'$not': {self._operator: self._constant}}}
+
+        return mongo
 
 
 class FuncOp(CmpOp):
@@ -594,13 +590,21 @@ class FuncOp(CmpOp):
         }
 
 
+LIKE_OPERATOR_MAP = {
+    'LIKE': '$regex',
+    'iLIKE': '$regex',
+}
+
+
 OPERATOR_MAP = {
     '=': '$eq',
     '>': '$gt',
     '<': '$lt',
     '>=': '$gte',
     '<=': '$lte',
+    **LIKE_OPERATOR_MAP,
 }
+
 OPERATOR_PRECEDENCE = {
     'IS': 8,
     'BETWEEN': 7,
