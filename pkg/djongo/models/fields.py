@@ -222,7 +222,10 @@ class ModelField(MongoField):
     def get_db_prep_save(self, value, connection):
         if value is None:
             return None
-
+        
+        if isinstance(value, self.model_container):
+            value = {field.attname: getattr(value, field.attname)
+                     for field in value._meta.fields}
         if not isinstance(value, self.base_type):
             raise ValueError(
                 f'Value: {value} must be an instance of {self.base_type}')
@@ -255,6 +258,9 @@ class ModelField(MongoField):
         if isinstance(value, str):
             value = json.loads(value)
 
+        if isinstance(value, self.model_container):
+            value = {field.attname: getattr(value, field.attname)
+                     for field in value._meta.fields}
         if not isinstance(value, self.base_type):
             raise ValidationError(
                 f'Value: {value} must be an instance of {self.base_type}')
