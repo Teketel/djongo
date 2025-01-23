@@ -606,8 +606,11 @@ class EmbeddedFormWidget(forms.MultiWidget):
             return value
         elif isinstance(value, Model):
             return [getattr(value, f_n) for f_n in self.field_names]
+        elif isinstance(value, dict):
+            return [value[f_n] for f_n in self.field_names]
         else:
-            raise forms.ValidationError('Expected model-form')
+            raise forms.ValidationError('Expected model-form, or dict type')
+
 
     def value_from_datadict(self, data, files, name):
         ret = []
