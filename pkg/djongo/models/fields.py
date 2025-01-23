@@ -588,7 +588,11 @@ class EmbeddedFormBoundField(forms.BoundField):
     #     return getattr(self.field.model_form, name)
 
     def __str__(self):
-        instance = self.value()
+        value = self.value()
+        if isinstance(value, dict):
+            instance = self.field.model_form_class.Meta.model(**value)
+        else:
+            instance = value
         model_form = self.field.model_form_class(instance=instance, **self.field.model_form_kwargs)
 
         return mark_safe(f'<table>\n{ model_form.as_table() }\n</table>')
