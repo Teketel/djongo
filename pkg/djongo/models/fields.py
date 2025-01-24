@@ -222,7 +222,10 @@ class ModelField(MongoField):
     def get_db_prep_save(self, value, connection):
         if value is None:
             return None
-
+        
+        if isinstance(value, self.model_container):
+            value = {field.attname: getattr(value, field.attname)
+                     for field in value._meta.fields}
         if not isinstance(value, self.base_type):
             raise ValueError(
                 f'Value: {value} must be an instance of {self.base_type}')
@@ -255,6 +258,9 @@ class ModelField(MongoField):
         if isinstance(value, str):
             value = json.loads(value)
 
+        if isinstance(value, self.model_container):
+            value = {field.attname: getattr(value, field.attname)
+                     for field in value._meta.fields}
         if not isinstance(value, self.base_type):
             raise ValidationError(
                 f'Value: {value} must be an instance of {self.base_type}')
@@ -588,7 +594,11 @@ class EmbeddedFormBoundField(forms.BoundField):
     #     return getattr(self.field.model_form, name)
 
     def __str__(self):
-        instance = self.value()
+        value = self.value()
+        if isinstance(value, dict):
+            instance = self.field.model_form_class.Meta.model(**value)
+        else:
+            instance = value
         model_form = self.field.model_form_class(instance=instance, **self.field.model_form_kwargs)
 
         return mark_safe(f'<table>\n{ model_form.as_table() }\n</table>')
@@ -606,8 +616,11 @@ class EmbeddedFormWidget(forms.MultiWidget):
             return value
         elif isinstance(value, Model):
             return [getattr(value, f_n) for f_n in self.field_names]
+        elif isinstance(value, dict):
+            return [value[f_n] for f_n in self.field_names]
         else:
-            raise forms.ValidationError('Expected model-form')
+            raise forms.ValidationError('Expected model-form, or dict type')
+
 
     def value_from_datadict(self, data, files, name):
         ret = []
