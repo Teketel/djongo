@@ -7,4 +7,4 @@
 #       * Renz Ladia
 #       * thestick613
 
-__version__ = '1.3.9.tk'
+__version__ = '1.3.9.post1'
